@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/duosecurity/duo_api_golang"
+	duoapi "github.com/duosecurity/duo_api_golang"
 )
 
 // Client provides access to Duo's admin API.
@@ -717,6 +717,65 @@ func (c *Client) GetU2FToken(registrationID string) (*GetU2FTokensResult, error)
 	}
 
 	result := &GetU2FTokensResult{}
+	err = json.Unmarshal(body, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// Admin models a single Admin.
+type Admin struct {
+	AdminID   string `json:"admin_id"`
+	Email     string
+	LastLogin *uint64 `json:"last_login"`
+	Name      string
+	Role      string
+	Status    string
+}
+
+// GetAdminsResult models responses containing a list of admins.
+type GetAdminsResult struct {
+	duoapi.StatResult
+	ListResult
+	Response []Admin
+}
+
+func (result *GetAdminsResult) getResponse() interface{} {
+	return result.Response
+}
+
+func (result *GetAdminsResult) appendResponse(admins interface{}) {
+	asserted_admins := admins.([]Admin)
+	result.Response = append(result.Response, asserted_admins...)
+}
+
+// GetAdmins calls GET /admin/v1/admins
+// See https://duo.com/docs/adminapi#retrieve-administrators
+func (c *Client) GetAdmins(options ...func(*url.Values)) (*GetAdminsResult, error) {
+	params := url.Values{}
+	for _, o := range options {
+		o(&params)
+	}
+
+	cb := func(params url.Values) (responsePage, error) {
+		return c.retrieveAdmins(params)
+	}
+	response, err := c.retrieveItems(params, cb)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.(*GetAdminsResult), nil
+}
+
+func (c *Client) retrieveAdmins(params url.Values) (*GetAdminsResult, error) {
+	_, body, err := c.SignedCall(http.MethodGet, "/admin/v1/admins", params, duoapi.UseTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &GetAdminsResult{}
 	err = json.Unmarshal(body, result)
 	if err != nil {
 		return nil, err
